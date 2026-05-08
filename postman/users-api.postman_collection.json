@@ -1,0 +1,378 @@
+{
+  "info": {
+    "name": "Users API",
+    "description": "User management REST API — CRUD over /users with health probes and activate/deactivate.\n\n**Variables:**\n- `base_url` — base URL of the API (default: http://localhost:8080)\n- `user_id` — auto-populated after `Create user → happy path` runs.\n\n**Folders:** one per operation. Inside each: happy path + error cases.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "users-api-v2"
+  },
+  "variable": [
+    { "key": "base_url", "value": "https://users-api-w7muf5urhq-uc.a.run.app", "type": "string" },
+    { "key": "user_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness",
+          "item": [
+            {
+              "name": "Liveness OK (200)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/health/live",
+                  "host": ["{{base_url}}"],
+                  "path": ["health", "live"]
+                },
+                "description": "Liveness probe — returns 200 if the process is alive."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Readiness",
+          "item": [
+            {
+              "name": "Readiness OK (200)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/health/ready",
+                  "host": ["{{base_url}}"],
+                  "path": ["health", "ready"]
+                },
+                "description": "Readiness probe — verifies DB connectivity."
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Create user",
+          "item": [
+            {
+              "name": "Create — happy path (201)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status is 201', () => pm.response.to.have.status(201));",
+                      "const body = pm.response.json();",
+                      "pm.test('response has id', () => pm.expect(body).to.have.property('id'));",
+                      "pm.test('active defaults to false', () => pm.expect(body.active).to.eql(false));",
+                      "if (body.id) {",
+                      "    pm.collectionVariables.set('user_id', body.id);",
+                      "    console.log('user_id set to', body.id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"john.doe\",\n  \"email\": \"john.doe@email.com\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"role\": \"user\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{base_url}}/users",
+                  "host": ["{{base_url}}"],
+                  "path": ["users"]
+                },
+                "description": "Creates a user. `active` defaults to `false` — must be activated separately.\n\n**Body:**\n- `username` (3-50, regex `^[a-zA-Z0-9_.-]+$`, unique)\n- `email` (valid email, unique)\n- `first_name`, `last_name` (1-100)\n- `role` (admin/user/guest, default `user`)"
+              }
+            },
+            {
+              "name": "Create — invalid email (422)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"bad.email\",\n  \"email\": \"not-an-email\",\n  \"first_name\": \"X\",\n  \"last_name\": \"Y\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{base_url}}/users",
+                  "host": ["{{base_url}}"],
+                  "path": ["users"]
+                },
+                "description": "Returns `422 Unprocessable Entity` (`application/problem+json`). Body lists failed validators under `errors`."
+              }
+            },
+            {
+              "name": "Create — duplicate (409)",
+              "request": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"john.doe\",\n  \"email\": \"john.doe@email.com\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{base_url}}/users",
+                  "host": ["{{base_url}}"],
+                  "path": ["users"]
+                },
+                "description": "Run after `happy path`. Returns `409 Conflict` with `type=...user-already-exists`."
+              }
+            }
+          ]
+        },
+        {
+          "name": "List users",
+          "item": [
+            {
+              "name": "List all (200)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users?limit=50&offset=0",
+                  "host": ["{{base_url}}"],
+                  "path": ["users"],
+                  "query": [
+                    { "key": "limit", "value": "50", "description": "Page size (1-200, default 50)" },
+                    { "key": "offset", "value": "0", "description": "Pagination offset (>= 0, default 0)" }
+                  ]
+                },
+                "description": "Lists all users (active and inactive), ordered by `created_at` desc."
+              }
+            },
+            {
+              "name": "List only active (200)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users?active=true&limit=50&offset=0",
+                  "host": ["{{base_url}}"],
+                  "path": ["users"],
+                  "query": [
+                    { "key": "active", "value": "true", "description": "Filter only active users" },
+                    { "key": "limit", "value": "50" },
+                    { "key": "offset", "value": "0" }
+                  ]
+                },
+                "description": "Lists only users with `active=true`."
+              }
+            },
+            {
+              "name": "List only inactive (200)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users?active=false&limit=50&offset=0",
+                  "host": ["{{base_url}}"],
+                  "path": ["users"],
+                  "query": [
+                    { "key": "active", "value": "false", "description": "Filter only inactive users" },
+                    { "key": "limit", "value": "50" },
+                    { "key": "offset", "value": "0" }
+                  ]
+                },
+                "description": "Lists only users with `active=false` — useful right after Create to find users that need activation."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get user by id",
+          "item": [
+            {
+              "name": "Get — happy path (200)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users/{{user_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["users", "{{user_id}}"]
+                },
+                "description": "Retrieves a user by UUID. Requires `user_id` set (run `Create user → happy path` first)."
+              }
+            },
+            {
+              "name": "Get — not found (404)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users/00000000-0000-0000-0000-000000000000",
+                  "host": ["{{base_url}}"],
+                  "path": ["users", "00000000-0000-0000-0000-000000000000"]
+                },
+                "description": "Returns `404 Not Found` with `application/problem+json` body (`type=...user-not-found`)."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update user",
+          "item": [
+            {
+              "name": "Update — partial (200)",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"first_name\": \"Augusta\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{base_url}}/users/{{user_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["users", "{{user_id}}"]
+                },
+                "description": "Partial update — send only the fields to change. To toggle `active`, prefer `/activate` and `/deactivate` endpoints."
+              }
+            },
+            {
+              "name": "Update — not found (404)",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"first_name\": \"Ghost\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{base_url}}/users/00000000-0000-0000-0000-000000000000",
+                  "host": ["{{base_url}}"],
+                  "path": ["users", "00000000-0000-0000-0000-000000000000"]
+                },
+                "description": "Returns `404` when the id does not exist."
+              }
+            },
+            {
+              "name": "Update — duplicate email (409)",
+              "request": {
+                "method": "PATCH",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"existing-other-user@example.com\"\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                  "raw": "{{base_url}}/users/{{user_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["users", "{{user_id}}"]
+                },
+                "description": "Returns `409` when the new username/email is already taken by another user. Adjust the email in the body to one that already exists in DB."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activate user",
+          "item": [
+            {
+              "name": "Activate — happy path (200)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users/{{user_id}}/activate",
+                  "host": ["{{base_url}}"],
+                  "path": ["users", "{{user_id}}", "activate"]
+                },
+                "description": "Sets `active=true`. Idempotent — calling on an already-active user returns 200 with no changes."
+              }
+            },
+            {
+              "name": "Activate — not found (404)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users/00000000-0000-0000-0000-000000000000/activate",
+                  "host": ["{{base_url}}"],
+                  "path": ["users", "00000000-0000-0000-0000-000000000000", "activate"]
+                },
+                "description": "Returns `404` when the id does not exist."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deactivate user",
+          "item": [
+            {
+              "name": "Deactivate — happy path (200)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users/{{user_id}}/deactivate",
+                  "host": ["{{base_url}}"],
+                  "path": ["users", "{{user_id}}", "deactivate"]
+                },
+                "description": "Sets `active=false`. Idempotent — calling on an already-inactive user returns 200 with no changes."
+              }
+            },
+            {
+              "name": "Deactivate — not found (404)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users/00000000-0000-0000-0000-000000000000/deactivate",
+                  "host": ["{{base_url}}"],
+                  "path": ["users", "00000000-0000-0000-0000-000000000000", "deactivate"]
+                },
+                "description": "Returns `404` when the id does not exist."
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete user",
+          "item": [
+            {
+              "name": "Delete — happy path (204)",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users/{{user_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["users", "{{user_id}}"]
+                },
+                "description": "Physical delete — row is removed from DB. Returns `204 No Content`."
+              }
+            },
+            {
+              "name": "Delete — not found (404)",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/users/00000000-0000-0000-0000-000000000000",
+                  "host": ["{{base_url}}"],
+                  "path": ["users", "00000000-0000-0000-0000-000000000000"]
+                },
+                "description": "Returns `404` when the id does not exist."
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
